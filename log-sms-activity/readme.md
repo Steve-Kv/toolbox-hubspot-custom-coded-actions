@@ -79,6 +79,7 @@ A communication will be created in HubSpot, appearing in the deal timeline with:
 - If no contact is provided, the system will mention this in the communication body so it’s not silently missed.
 - You may want to add a branch action following the custom code action and set it up to check if the code rans successfully or not. Then setting up an alert notification if it fails.
 - You may want to add actions to clear the `sms_sent_received_date_time` and `sms_sent_received_message` properties once the code has successfully run. This will allow the properties to become available once again for population and for workflow re-enrolment criteria to be turned on.
+- SMS communications records currently (As of June 2025) do not have a `Direction` property, the SMS message logged in this set up example doesn't define the direction.
 
 ---
 
