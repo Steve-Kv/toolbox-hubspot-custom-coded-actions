@@ -23,37 +23,41 @@ You can adapt this code for other activity types, for example, logging an email 
 - Associates the communication with:
   - The enrolled **Deal** record within the workflow (required)
   - The primary **Contact** record that is associated to the enrolled **Deal** (optional)
-- Tags the communication with the HubSpot owner
-- Adds automated system notes for transparency
+- Adds automated system notes into the communication body for transparency
 
 ---
 
 ## ⚙️ How to Use
 
 1. **Create a Workflow**  
-   In HubSpot, set up a Deal-based workflow and configure your enrollment trigger (e.g., property indicating an SMS reply has been logged externally).
+   In HubSpot, set up a Deal-based workflow and configure your enrollment trigger:
+     - `sms_sent_received_date_time` is `known`
+  
+  Note: `sms_sent_received_message` is not mandatory for this code to work, but can be added here as `known`
 
-2. **Add a "Custom Code" Action**  
+3. **Add a "Custom Code" Action**  
    Within the workflow, insert a **Custom Code** action.
 
-3. **Set Input Fields**  
+4. **Set Input Fields**  
    Add the following **Input Fields** to pass into your code:
 
-   | Field Name                              | Example Value                     | Required | Description                                      |
+   | Field Name                             | Example Value                     | Required | Description                                      |
    |----------------------------------------|-----------------------------------|----------|--------------------------------------------------|
-   | `log_response_to_sms_outreach_datetime` | `2025-06-05T09:00:00Z`            | ✅       | Date/time the SMS was received (ISO 8601)        |
-   | `log_response_to_sms_outreach_message`  | `"Sure, sounds good!"`            | ❌       | The actual SMS message content                   |
-   | `hubspot_owner_id`                      | `12345678`                        | ✅       | The HubSpot owner ID responsible for the deal    |
-   | `contact_hs_object_id`                  | `987654321`                       | ❌       | The contact’s HubSpot ID (if available)          |
+   | `sms_sent_received_date_time`          | `2025-06-05T09:00:00Z`            | ✅       | Date/time the SMS was received (ISO 8601)        |
+   | `sms_sent_received_message`            | `"Sure, sounds good!"`            | ❌       | The actual SMS message content                   |
+   | `hubspot_owner_id`                     | `12345678`                        | ✅       | The HubSpot owner ID responsible for the deal    |
+   | `contact_hs_object_id`                 | `987654321`                       | ❌       | The contact’s HubSpot ID (if available)          |
 
-4. **Set Secret (Private App Token)**  
+   Note: To retrieve the contact record ID, add the target associated contact record to the available records of the workflow. (e.g. First associated contact to deal)
+
+5. **Set Secret (Private App Token)**  
    In the **Secrets** tab of the code action, add the following:
 
    | Secret Name     | Description                                  |
    |-----------------|----------------------------------------------|
-   | `cca_activities` | Your HubSpot private app token (with `crm.objects.communications.write` scope) |
+   | `cca_activities` | Your HubSpot private app token (with the scopes `crm.objects.contacts.write`, `crm.objects.deals.read`, `crm.objects.deals.write`, `crm.objects.contacts.read` scopes) |
 
-5. **Paste in the Python Script**  
+6. **Paste in the Python Script**  
    Copy the contents of [`sms_logger.py`](./sms_logger.py) into the code editor and save the action.
 
 ---
@@ -73,13 +77,14 @@ A communication will be created in HubSpot, appearing in the deal timeline with:
 
 - If no message is passed in, the record will still be created with a fallback note.
 - If no contact is provided, the system will mention this in the communication body so it’s not silently missed.
-- Consider pairing this with a webhook or Talkdesk/Textline integration that updates a custom property when a new SMS reply is received.
+- You may want to add a branch action following the custom code action and set it up to check if the code rans successfully or not. Then setting up an alert notification if it fails.
+- You may want to add actions to clear the `sms_sent_received_date_time` and `sms_sent_received_message` properties once the code has successfully run. This will allow the properties to become available once again for population and for workflow re-enrolment criteria to be turned on.
 
 ---
 
 ## 📄 License
 
-MIT – feel free to use, adapt, and build upon it for your team’s CRM automation needs. Just sent some love my way if it's been useful! :)
+Feel free to use, adapt, and build upon it for your team’s CRM automation needs. Just sent some love my way if it's been useful! :)
 
 ---
 
