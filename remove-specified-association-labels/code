@@ -1,1 +1,127 @@
+import os
+import requests
+from hubspot import HubSpot
+from hubspot.crm.contacts import PublicObjectSearchRequest
 
+# HubSpot SDK client for contact search
+hubspot_client = HubSpot(access_token=os.getenv("HUBSPOT_ACCESS_TOKEN"))
+
+# Constants
+HUBSPOT_API_KEY = os.getenv("HUBSPOT_ACCESS_TOKEN")
+LABEL_ID_DEAL_TO_CONTACT = 108  # Label used for deal → contact association
+HEADERS = {
+    "Authorization": f"Bearer {HUBSPOT_API_KEY}",
+    "Content-Type": "application/json"
+}
+
+def get_contact_by_email(email):
+    try:
+        # First try exact match on primary email
+        primary_email_request = PublicObjectSearchRequest(
+            filter_groups=[{
+                "filters": [{
+                    "propertyName": "email",
+                    "operator": "EQ",
+                    "value": email
+                }]
+            }],
+            properties=["email", "hs_additional_emails"],
+            limit=1
+        )
+        primary_results = hubspot_client.crm.contacts.search_api.do_search(primary_email_request)
+        if primary_results.results:
+            return primary_results.results[0].id
+
+        # Fallback: try searching additional emails
+        additional_email_request = PublicObjectSearchRequest(
+            filter_groups=[{
+                "filters": [{
+                    "propertyName": "hs_additional_emails",
+                    "operator": "CONTAINS_TOKEN",
+                    "value": email
+                }]
+            }],
+            properties=["email", "hs_additional_emails"],
+            limit=1
+        )
+        fallback_results = hubspot_client.crm.contacts.search_api.do_search(additional_email_request)
+        if fallback_results.results:
+            return fallback_results.results[0].id
+
+    except Exception as e:
+        print(f"Error finding contact by email: {e}")
+    return None
+
+def get_associated_contacts_with_label(deal_id, label_id):
+    url = f"https://api.hubapi.com/crm/v4/associations/deals/contacts/batch/read"
+    body = {
+        "inputs": [{"id": str(deal_id)}]
+    }
+    try:
+        response = requests.post(url, headers=HEADERS, json=body)
+        response.raise_for_status()
+        data = response.json()
+
+        matching_contacts = []
+        for result in data.get("results", []):
+            for to_obj in result.get("to", []):
+                for assoc_type in to_obj.get("associationTypes", []):
+                    if assoc_type.get("typeId") == label_id:
+                        matching_contacts.append(to_obj["toObjectId"])
+        return matching_contacts
+
+    except Exception as e:
+        print(f"Error fetching associated contacts with label: {e}")
+        return []
+
+def remove_association_label(deal_id, contact_id, label_id):
+    url = "https://api.hubapi.com/crm/v4/associations/deals/contacts/batch/labels/archive"
+    body = {
+        "inputs": [
+            {
+                "from": {"id": str(deal_id)},
+                "to": {"id": str(contact_id)},
+                "types": [
+                    {
+                        "associationCategory": "USER_DEFINED",
+                        "associationTypeId": label_id
+                    }
+                ]
+            }
+        ]
+    }
+
+    try:
+        print(f"Removing label {label_id} between deal {deal_id} and contact {contact_id}")
+        response = requests.post(url, headers=HEADERS, json=body)
+        if response.status_code >= 400:
+            print("HubSpot response body:", response.text)
+        response.raise_for_status()
+        print(f"Successfully removed label {label_id}")
+    except Exception as e:
+        if hasattr(e, "response") and e.response is not None:
+            print("HubSpot response body:", e.response.text)
+        print(f"Failed to remove label {label_id}: {e}")
+
+def main(event):
+    deal_id = event["inputFields"]["hs_object_id"]
+    email_deal = event["inputFields"]["email_deal"]
+
+    correct_contact_id = get_contact_by_email(email_deal)
+    print(f"Correct contact ID from email '{email_deal}': {correct_contact_id}")
+
+    associated_with_label = get_associated_contacts_with_label(deal_id, LABEL_ID_DEAL_TO_CONTACT)
+    print(f"Contacts associated with deal {deal_id} using label {LABEL_ID_DEAL_TO_CONTACT}: {associated_with_label}")
+
+    removed_count = 0
+    for contact_id in associated_with_label:
+        if str(contact_id) != str(correct_contact_id):
+            remove_association_label(deal_id, contact_id, LABEL_ID_DEAL_TO_CONTACT)
+            removed_count += 1
+
+    return {
+        "outputFields": {
+            "correct_contact_id": str(correct_contact_id) if correct_contact_id else "",
+            "num_contacts_removed": str(removed_count)
+        }
+    }
